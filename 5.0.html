@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>系统日志关键词过滤系统</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind 配置 -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#7B61FF', // 现代紫色主调
+            secondary: '#36CFC9',
+            accent: '#FF7D00',
+            danger: '#F53F3F',
+            success: '#00B42A',
+            warning: '#FF7D00',
+            dark: '#1D2129',
+            'dark-2': '#4E5969',
+            'light-1': '#F2F3F5',
+            'light-2': '#E5E6EB',
+            'light-3': '#C9CDD4'
+          },
+          fontFamily: {
+            inter: ['Inter', 'sans-serif'],
+          },
+          animation: {
+            'float': 'float 3s ease-in-out infinite',
+            'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'bounce-slow': 'bounce 3s infinite',
+          },
+          keyframes: {
+            float: {
+              '0%, 100%': { transform: 'translateY(0)' },
+              '50%': { transform: 'translateY(-10px)' },
+            }
+          }
+        },
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+      }
+      .text-shadow {
+        text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      .transition-height {
+        transition: max-height 0.3s ease-in-out;
+      }
+      .help-tooltip {
+        position: relative;
+      }
+      .help-tooltip:hover .tooltip-content {
+        visibility: visible;
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .tooltip-content {
+        visibility: hidden;
+        opacity: 0;
+        transform: translateY(10px);
+        transition: all 0.3s ease;
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%) translateY(0);
+        z-index: 50;
+        width: 250px;
+        background-color: white;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        border-radius: 8px;
+        padding: 12px;
+        font-size: 12px;
+        color: #4E5969;
+        pointer-events: none;
+      }
+      .tooltip-content::after {
+        content: '';
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -5px;
+        border-width: 5px;
+        border-style: solid;
+        border-color: white transparent transparent transparent;
+      }
+      .tutorial-step {
+        transition: all 0.3s ease;
+      }
+      .tutorial-step:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 25px -5px rgba(123, 97, 255, 0.1);
+      }
+    }
+  </style>
+</head>
+
+<body class="font-inter bg-gray-50 text-dark min-h-screen flex flex-col overflow-x-hidden">
+  <!-- 开场动画 -->
+  <div id="splash-screen" class="fixed inset-0 bg-white z-50 flex flex-col items-center justify-center">
+    <div class="relative w-32 h-32 mb-8">
+      <i class="fa fa-filter text-primary text-6xl absolute inset-0 flex items-center justify-center animate-float"></i>
+      <div class="absolute inset-0 border-4 border-primary/20 rounded-full animate-pulse-slow"></div>
+      <div class="absolute inset-2 border-2 border-primary/30 rounded-full animate-pulse-slow" style="animation-delay: 0.5s"></div>
+    </div>
+    <h1 class="text-3xl font-bold text-primary mb-6">系统日志关键词过滤系统</h1>
+    <div class="w-64 h-2 bg-light-2 rounded-full overflow-hidden">
+      <div id="loading-bar" class="h-full bg-primary rounded-full w-0 transition-all duration-1000 ease-out"></div>
+    </div>
+    <p class="mt-4 text-dark-2 text-sm">正在加载中...</p>
+    <div class="absolute bottom-8 flex space-x-3">
+      <div class="w-3 h-3 bg-primary/30 rounded-full animate-bounce-slow"></div>
+      <div class="w-3 h-3 bg-primary/50 rounded-full animate-bounce-slow" style="animation-delay: 0.2s"></div>
+      <div class="w-3 h-3 bg-primary rounded-full animate-bounce-slow" style="animation-delay: 0.4s"></div>
+    </div>
+  </div>
+
+  <!-- 顶部导航栏 -->
+  <header class="bg-white shadow-md z-10 transition-all duration-300" id="navbar">
+    <div class="container mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <i class="fa fa-filter text-primary text-2xl"></i>
+        <h1 class="text-xl md:text-2xl font-bold text-primary">系统日志关键词过滤系统</h1>
+      </div>
+      <div class="flex items-center space-x-4">
+        <!-- 帮助/教程按钮 -->
+        <button id="helpButton" class="hidden md:flex items-center text-dark-2 hover:text-primary transition-colors group">
+          <i class="fa fa-question-circle mr-1 group-hover:scale-110 transition-transform"></i>
+          <span>帮助</span>
+        </button>
+        <button class="hidden md:flex items-center text-dark-2 hover:text-primary transition-colors group">
+          <i class="fa fa-history mr-1 group-hover:scale-110 transition-transform"></i>
+          <span>历史</span>
+        </button>
+        <div class="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary relative group">
+          <i class="fa fa-user group-hover:scale-110 transition-transform"></i>
+          <div class="absolute -top-1 -right-1 w-4 h-4 bg-success rounded-full border-2 border-white"></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 教程模态框 -->
+  <div id="tutorialModal" class="fixed inset-0 bg-dark/50 z-50 flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto m-4 transform scale-95 transition-transform duration-300">
+      <div class="p-6 border-b border-light-2 flex justify-between items-center">
+        <h2 class="text-xl font-bold text-primary flex items-center">
+          <i class="fa fa-book mr-2"></i>使用教程
+        </h2>
+        <button id="closeTutorial" class="text-light-3 hover:text-dark-2 transition-colors">
+          <i class="fa fa-times text-xl"></i>
+        </button>
+      </div>
+      <div class="p-6">
+        <div class="mb-8 text-center">
+          <div class="inline-block p-3 bg-primary/10 rounded-full mb-4">
+            <i class="fa fa-graduation-cap text-3xl text-primary"></i>
+          </div>
+          <h3 class="text-lg font-semibold mb-2">欢迎使用系统日志关键词过滤系统</h3>
+          <p class="text-dark-2">本教程将帮助您快速掌握系统的使用方法，完成日志过滤分析</p>
+        </div>
+        
+        <div class="space-y-8">
+          <!-- 教程步骤1 -->
+          <div class="tutorial-step bg-light-1 rounded-xl p-5">
+            <div class="flex items-start">
+              <div class="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0 mt-0.5">1</div>
+              <div class="ml-4">
+                <h4 class="font-semibold mb-2">上传日志文件</h4>
+                <p class="text-dark-2 mb-3">您可以上传应用日志和数据库日志文件（支持.log和.txt格式），支持点击上传或拖放文件</p>
+                <div class="bg-white p-3 rounded-lg border border-light-2">
+                  <img src="https://picsum.photos/id/0/600/200" alt="上传示例" class="w-full h-auto rounded">
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 教程步骤2 -->
+          <div class="tutorial-step bg-light-1 rounded-xl p-5">
+            <div class="flex items-start">
+              <div class="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0 mt-0.5">2</div>
+              <div class="ml-4">
+                <h4 class="font-semibold mb-2">设置过滤关键词</h4>
+                <p class="text-dark-2 mb-3">
+                  输入需要排除和保留的关键词（使用逗号分隔）<br>
+                  - 排除关键词：日志中将排除包含这些关键词的条目<br>
+                  - 保留关键词：日志中将保留包含这些关键词的条目
+                </p>
+                <div class="bg-white p-3 rounded-lg border border-light-2">
+                  <img src="https://picsum.photos/id/180/600/200" alt="关键词设置示例" class="w-full h-auto rounded">
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 教程步骤3 -->
+          <div class="tutorial-step bg-light-1 rounded-xl p-5">
+            <div class="flex items-start">
+              <div class="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0 mt-0.5">3</div>
+              <div class="ml-4">
+                <h4 class="font-semibold mb-2">配置关联筛选（可选）</h4>
+                <p class="text-dark-2 mb-3">
+                  启用关联筛选可以找出不同日志间的关联关系，系统会计算两份日志的笛卡尔积，
+                  并筛选符合条件的关联日志对
+                </p>
+                <div class="bg-white p-3 rounded-lg border border-light-2">
+                  <img src="https://picsum.photos/id/48/600/200" alt="关联筛选示例" class="w-full h-auto rounded">
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 教程步骤4 -->
+          <div class="tutorial-step bg-light-1 rounded-xl p-5">
+            <div class="flex items-start">
+              <div class="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0 mt-0.5">4</div>
+              <div class="ml-4">
+                <h4 class="font-semibold mb-2">查看过滤结果</h4>
+                <p class="text-dark-2 mb-3">
+                  点击"执行过滤"按钮后，系统会展示过滤结果，包括：<br>
+                  - 单日志过滤结果：显示过滤前后的统计数据和日志内容<br>
+                  - 关联日志对：显示符合条件的日志关联对和统计图表
+                </p>
+                <div class="bg-white p-3 rounded-lg border border-light-2">
+                  <img src="https://picsum.photos/id/201/600/200" alt="结果查看示例" class="w-full h-auto rounded">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="mt-8 pt-6 border-t border-light-2">
+          <h4 class="font-semibold mb-4">过滤原理说明</h4>
+          <div class="bg-primary/5 rounded-lg p-4 mb-4">
+            <h5 class="font-medium text-primary mb-2">单日志过滤</h5>
+            <p class="text-dark-2 text-sm">
+              定义原始日志集L，排除关键词日志集F（含任一排除关键词的日志），保留关键词日志集K（含任一保留关键词的日志）<br>
+              过滤结果：(L - F) ∩ K（先进行差运算，再进行交运算）
+            </p>
+          </div>
+          <div class="bg-primary/5 rounded-lg p-4">
+            <h5 class="font-medium text-primary mb-2">多日志关联</h5>
+            <p class="text-dark-2 text-sm">
+              设应用日志集L₁，数据库日志集L₂，两者的笛卡尔积L₁×L₂ = {(l₁,l₂) | l₁∈L₁, l₂∈L₂}<br>
+              筛选条件：l₁含指定关键词且l₂含指定关键词，对应笛卡尔积的子集筛选
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="p-6 border-t border-light-2 text-center">
+        <button id="finishTutorial" class="px-6 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg transition-colors">
+          开始使用
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 小机器人助手 -->
+  <div class="fixed bottom-6 right-6 z-40">
+    <button id="robotAssistant" class="bg-primary hover:bg-primary/90 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-all duration-300 transform hover:scale-110">
+      <i class="fa fa-android text-2xl"></i>
+    </button>
+  </div>
+
+  <!-- 助手对话框 -->
+  <div id="assistantDialog" class="fixed bottom-24 right-6 w-80 bg-white rounded-xl shadow-xl overflow-hidden transform translate-y-full opacity-0 transition-all duration-300 z-40">
+    <div class="bg-primary text-white p-4">
+      <div class="flex justify-between items-center">
+        <h3 class="font-medium flex items-center">
+          <i class="fa fa-android mr-2"></i>日志小助手
+        </h3>
+        <button id="closeAssistant" class="hover:text-light-1 transition-colors">
+          <i class="fa fa-times"></i>
+        </button>
+      </div>
+    </div>
+    <div class="p-4 max-h-64 overflow-y-auto scrollbar-hide">
+      <div class="space-y-4">
+        <div class="flex items-start">
+          <div class="bg-primary/10 text-primary rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0">
+            <i class="fa fa-android"></i>
+          </div>
+          <div class="ml-3 bg-light-1 rounded-lg rounded-tl-none p-3 max-w-[80%]">
+            <p class="text-sm text-dark-2">您好！我是日志小助手，有什么可以帮助您的吗？</p>
+          </div>
+        </div>
+        
+        <div class="flex items-start justify-end">
+          <div class="mr-3 bg-primary/10 text-dark rounded-lg rounded-tr-none p-3 max-w-[80%]">
+            <p class="text-sm">什么是集合差运算？</p>
+          </div>
+          <div class="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0">
+            <i class="fa fa-user"></i>
+          </div>
+        </div>
+        
+        <div class="flex items-start">
+          <div class="bg-primary/10 text-primary rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0">
+            <i class="fa fa-android"></i>
+          </div>
+          <div class="ml-3 bg-light-1 rounded-lg rounded-tl-none p-3 max-w-[80%]">
+            <p class="text-sm text-dark-2">集合差运算就是从一个集合中移除另一个集合中的元素。例如，日志过滤中的"原始日志集 - 排除关键词日志集"，就是保留所有不在排除集合中的日志条目。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="p-3 border-t border-light-2">
+      <div class="flex">
+        <input type="text" placeholder="请输入您的问题..." class="flex-1 px-3 py-2 border border-light-2 rounded-l-lg focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none text-sm">
+        <button class="bg-primary text-white px-3 rounded-r-lg hover:bg-primary/90 transition-colors">
+          <i class="fa fa-paper-plane"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主内容区 -->
+  <main class="flex-1 container mx-auto px-4 py-6 flex flex-col lg:flex-row gap-6 opacity-0 transition-opacity duration-500" id="main-content">
+    
+    <!-- 左侧配置面板 -->
+    <section class="lg:w-1/3 bg-white rounded-xl shadow-lg p-5 transform transition-all duration-300 hover:shadow-xl">
+      <h2 class="text-lg font-semibold mb-5 flex items-center">
+        <i class="fa fa-sliders text-primary mr-2"></i>过滤配置
+        <span class="ml-2 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">步骤1-3</span>
+      </h2>
+      
+      <!-- 过滤原理简述 -->
+      <div class="mb-6 bg-primary/5 rounded-lg p-3 text-sm">
+        <div class="flex items-start">
+          <i class="fa fa-lightbulb-o text-primary mt-0.5 mr-2"></i>
+          <p class="text-dark-2">系统使用集合运算进行日志过滤：先排除含指定关键词的日志，再保留含指定关键词的日志，最后可进行多日志关联分析。</p>
+        </div>
+      </div>
+      
+      <!-- 文件上传区域 -->
+      <div class="mb-6">
+        <label class="block text-dark-2 mb-2 font-medium">
+          上传日志文件
+          <span class="help-tooltip ml-1">
+            <i class="fa fa-question-circle text-light-3"></i>
+            <div class="tooltip-content">
+              支持上传应用日志和数据库日志文件，格式为.log或.txt
+            </div>
+          </span>
+        </label>
+        <div class="space-y-4">
+          <!-- 应用日志上传 -->
+          <div class="border-2 border-dashed border-light-2 rounded-lg p-4 hover:border-primary transition-colors cursor-pointer group" id="appLogUpload">
+            <div class="flex flex-col items-center justify-center text-center">
+              <i class="fa fa-file-text-o text-3xl text-light-3 group-hover:text-primary transition-colors mb-2 transform group-hover:scale-110 transition-transform"></i>
+              <p class="text-dark-2 mb-1">应用日志</p>
+              <p class="text-xs text-light-3">拖放文件或点击上传</p>
+              <input type="file" class="hidden" accept=".log,.txt" id="appLogFile">
+            </div>
+            <div class="hidden mt-3 p-2 bg-light-1 rounded text-sm flex items-center" id="appLogName">
+              <i class="fa fa-check-circle text-success mr-1"></i>
+              <span></span>
+            </div>
+          </div>
+          
+          <!-- 数据库日志上传 -->
+          <div class="border-2 border-dashed border-light-2 rounded-lg p-4 hover:border-primary transition-colors cursor-pointer group" id="dbLogUpload">
+            <div class="flex flex-col items-center justify-center text-center">
+              <i class="fa fa-database text-3xl text-light-3 group-hover:text-primary transition-colors mb-2 transform group-hover:scale-110 transition-transform"></i>
+              <p class="text-dark-2 mb-1">数据库日志</p>
+              <p class="text-xs text-light-3">拖放文件或点击上传</p>
+              <input type="file" class="hidden" accept=".log,.txt" id="dbLogFile">
+            </div>
+            <div class="hidden mt-3 p-2 bg-light-1 rounded text-sm flex items-center" id="dbLogName">
+              <i class="fa fa-check-circle text-success mr-1"></i>
+              <span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 排除关键词 -->
+      <div class="mb-6">
+        <label for="excludeKeywords" class="block text-dark-2 mb-2 font-medium">
+          排除关键词
+          <span class="help-tooltip ml-1">
+            <i class="fa fa-question-circle text-light-3"></i>
+            <div class="tooltip-content">
+              输入需要排除的关键词，使用逗号分隔。系统会移除包含这些关键词的所有日志条目（集合差运算）。
+            </div>
+          </span>
+        </label>
+        <div class="relative">
+          <input type="text" id="excludeKeywords" 
+                 class="w-full px-4 py-2 border border-light-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all"
+                 placeholder="例如: DEBUG,INFO (使用逗号分隔)">
+          <div class="absolute right-3 top-1/2 transform -translate-y-1/2 text-light-3 group-hover:text-primary transition-colors">
+            <i class="fa fa-ban"></i>
+          </div>
+        </div>
+        <p class="text-xs text-light-3 mt-1">日志中将排除包含以上关键词的条目（L - F）</p>
+      </div>
+      
+      <!-- 保留关键词 -->
+      <div class="mb-6">
+        <label for="keepKeywords" class="block text-dark-2 mb-2 font-medium">
+          保留关键词
+          <span class="help-tooltip ml-1">
+            <i class="fa fa-question-circle text-light-3"></i>
+            <div class="tooltip-content">
+              输入需要保留的关键词，使用逗号分隔。系统会保留包含这些关键词的所有日志条目（集合交运算）。
+            </div>
+          </span>
+        </label>
+        <div class="relative">
+          <input type="text" id="keepKeywords" 
+                 class="w-full px-4 py-2 border border-light-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all"
+                 placeholder="例如: ERROR,WARN (使用逗号分隔)">
+          <div class="absolute right-3 top-1/2 transform -translate-y-1/2 text-light-3">
+            <i class="fa fa-check-circle"></i>
+          </div>
+        </div>
+        <p class="text-xs text-light-3 mt-1">日志中将保留包含以上关键词的条目（∩ K）</p>
+      </div>
+      
+      <!-- 关联筛选 -->
+      <div class="mb-6">
+        <label class="block text-dark-2 mb-2 font-medium">
+          关联筛选
+          <span class="help-tooltip ml-1">
+            <i class="fa fa-question-circle text-light-3"></i>
+            <div class="tooltip-content">
+              启用后可筛选不同日志间的关联关系，系统会计算两份日志的笛卡尔积，找出符合条件的关联日志对。
+            </div>
+          </span>
+        </label>
+        <div class="bg-light-1 rounded-lg p-4">
+          <div class="flex items-center mb-3">
+            <input type="checkbox" id="关联筛选" class="w-4 h-4 text-primary rounded focus:ring-primary/30">
+            <label for="关联筛选" class="ml-2 text-dark-2">启用关联筛选（笛卡尔积筛选）</label>
+          </div>
+          
+          <div class="grid grid-cols-1 gap-3 opacity-50 pointer-events-none transition-all duration-300" id="关联筛选选项">
+            <div class="flex items-center">
+              <select class="px-3 py-1 border border-light-2 rounded text-sm bg-white focus:ring-primary/30 focus:border-primary outline-none">
+                <option>应用日志</option>
+              </select>
+              <span class="mx-2 text-light-3">含</span>
+              <input type="text" value="ERROR" class="px-3 py-1 border border-light-2 rounded text-sm focus:ring-primary/30 focus:border-primary outline-none">
+            </div>
+            
+            <div class="flex items-center justify-center text-light-3">
+              <i class="fa fa-and"></i>
+            </div>
+            
+            <div class="flex items-center">
+              <select class="px-3 py-1 border border-light-2 rounded text-sm bg-white focus:ring-primary/30 focus:border-primary outline-none">
+                <option>数据库日志</option>
+              </select>
+              <span class="mx-2 text-light-3">含</span>
+              <input type="text" value="Connection" class="px-3 py-1 border border-light-2 rounded text-sm focus:ring-primary/30 focus:border-primary outline-none">
+            </div>
+            
+            <div class="text-xs text-dark-2 mt-2 p-2 bg-white/50 rounded">
+              <i class="fa fa-info-circle text-primary mr-1"></i>
+              系统将计算两个日志集的笛卡尔积，筛选出符合条件的关联日志对
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 执行按钮 -->
+      <button id="filterButton" class="w-full bg-primary hover:bg-primary/90 text-white font-medium py-3 px-4 rounded-lg transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center group">
+        <i class="fa fa-play mr-2 group-hover:translate-x-1 transition-transform"></i>
+        执行过滤
+        <span class="ml-2 text-xs bg-white/20 px-2 py-0.5 rounded-full">步骤4</span>
+      </button>
+    </section>
+    
+    <!-- 右侧结果展示区 -->
+    <section class="lg:w-2/3 bg-white rounded-xl shadow-lg overflow-hidden transform transition-all duration-300 hover:shadow-xl">
+      <!-- 结果标签页导航 -->
+      <div class="flex border-b border-light-2">
+        <button class="result-tab py-4 px-6 font-medium text-primary border-b-2 border-primary relative overflow-hidden group" data-tab="single-log">
+          <i class="fa fa-file-text mr-2 group-hover:scale-110 transition-transform"></i>
+          单日志过滤结果
+          <span class="absolute -bottom-8 left-0 right-0 h-1 bg-primary/30 transform group-hover:translate-y-8 transition-transform duration-300"></span>
+        </button>
+        <button class="result-tab py-4 px-6 font-medium text-dark-2 hover:text-primary transition-colors relative overflow-hidden group" data-tab="related-logs">
+          <i class="fa fa-exchange mr-2 group-hover:scale-110 transition-transform"></i>
+          关联日志对
+          <span class="absolute -bottom-8 left-0 right-0 h-1 bg-primary/30 transform group-hover:translate-y-8 transition-transform duration-300"></span>
+        </button>
+      </div>
+      
+      <!-- 结果内容区域 -->
+      <div class="p-5">
+        <!-- 初始状态提示 -->
+        <div id="initial-state" class="py-12 text-center">
+          <div class="inline-block p-4 bg-primary/10 rounded-full mb-4">
+            <i class="fa fa-filter text-3xl text-primary"></i>
+          </div>
+          <h3 class="text-lg font-medium mb-2">等待过滤操作</h3>
+          <p class="text-dark-2 max-w-md mx-auto">请在左侧配置过滤条件并上传日志文件，然后点击"执行过滤"按钮查看结果</p>
+          <div class="mt-6 flex justify-center">
+            <div class="w-32 h-32 relative">
+              <img src="https://picsum.photos/id/160/128/128" alt="日志过滤图示" class="w-full h-full object-cover rounded-full">
+              <div class="absolute inset-0 border-4 border-dashed border-primary/30 rounded-full animate-spin-slow"></div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 单日志过滤结果 -->
+        <div class="result-content hidden" id="single-log-content">
+          <!-- 统计信息 -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <!-- 应用日志统计 -->
+            <div class="bg-light-1 rounded-lg p-4 transform transition-all duration-300 hover:shadow-md">
+              <h3 class="font-medium mb-3 text-dark flex items-center">
+                <i class="fa fa-file-text-o text-primary mr-2"></i>应用日志统计
+              </h3>
+              <div class="space-y-2">
+                <div class="flex justify-between">
+                  <span class="text-dark-2">原始条数:</span>
+                  <span class="font-medium">1000 条</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-dark-2">排除后条数:</span>
+                  <span class="font-medium">300 条</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-dark-2">保留后条数:</span>
+                  <span class="font-medium text-primary">80 条</span>
+                </div>
+              </div>
+              <div class="mt-4 h-1.5 bg-light-2 rounded-full overflow-hidden">
+                <div class="h-full bg-primary rounded-full" style="width: 0%" id="appLogProgress"></div>
+              </div>
+              <div class="mt-2 text-xs text-right text-dark-2">
+                过滤率: 92%
+              </div>
+            </div>
+            
+            <!-- 数据库日志统计 -->
+            <div class="bg-light-1 rounded-lg p-4 transform transition-all duration-300 hover:shadow-md">
+              <h3 class="font-medium mb-3 text-dark flex items-center">
+                <i class="fa fa-database text-primary mr-2"></i>数据库日志统计
+              </h3>
+              <div class="space-y-2">
+                <div class="flex justify-between">
+                  <span class="text-dark-2">原始条数:</span>
+                  <span class="font-medium">850 条</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-dark-2">排除后条数:</span>
+                  <span class="font-medium">220 条</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-dark-2">保留后条数:</span>
+                  <span class="font-medium text-primary">65 条</span>
+                </div>
+              </div>
+              <div class="mt-4 h-1.5 bg-light-2 rounded-full overflow-hidden">
+                <div class="h-full bg-primary rounded-full" style="width: 0%" id="dbLogProgress"></div>
+              </div>
+              <div class="mt-2 text-xs text-right text-dark-2">
+                过滤率: 92.4%
+              </div>
+            </div>
+          </div>
+          
+          <!-- 日志过滤说明 -->
+          <div class="bg-primary/5 rounded-lg p-3 text-sm mb-6">
+            <div class="flex items-start">
+              <i class="fa fa-info-circle text-primary mt-0.5 mr-2"></i>
+              <div>
+                <p class="text-dark-2 font-medium">过滤过程说明：</p>
+                <p class="text-dark-2 mt-1">1. 从原始日志中排除包含"DEBUG"、"INFO"等关键词的条目（集合差运算）</p>
+                <p class="text-dark-2">2. 从剩余条目中保留包含"ERROR"、"WARN"等关键词的条目（集合交运算）</p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 日志内容预览 -->
+          <div>
+            <div class="flex justify-between items-center mb-3">
+              <h3 class="font-medium text-dark">应用日志预览 (前10条)</h3>
+              <span class="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">已过滤</span>
+            </div>
+            
+            <div class="space-y-3 max-h-96 overflow-y-auto scrollbar-hide pr-2">
+              <!-- 日志条目1 -->
+              <div class="log-item border border-light-2 rounded-lg overflow-hidden transform transition-all duration-300 hover:border-primary/50 hover:shadow-sm">
+                <div class="log-header bg-light-1 px-4 py-2 flex justify-between items-center cursor-pointer">
+                  <div class="flex items-center">
+                    <span class="inline-block w-2 h-2 rounded-full bg-danger mr-2 animate-pulse"></span>
+                    <span class="text-sm font-medium">2024-10-20 08:30:15</span>
+                  </div>
+                  <button class="text-light-3 hover:text-primary transition-colors log-toggle">
+                    <i class="fa fa-chevron-down transform transition-transform duration-300"></i>
+                  </button>
+                </div>
+                <div class="log-content px-4 py-3 bg-white text-sm text-dark-2">
+                  ERROR: 接口超时 - 用户[10086]访问/api/payment超时，响应时间超过3000ms
+                </div>
+              </div>
+              
+              <!-- 日志条目2 -->
+              <div class="log-item border border-light-2 rounded-lg overflow-hidden transform transition-all duration-300 hover:border-primary/50 hover:shadow-sm">
+                <div class="log-header bg-light-1 px-4 py-2 flex justify-between items-center cursor-pointer">
+                  <div class="flex items-center">
+                    <span class="inline-block w-2 h-2 rounded-full bg-warning mr-2"></span>
+                    <span class="text-sm font-medium">2024-10-20 08:32:45</span>
+                  </div>
+                  <button class="text-light-3 hover:text-primary transition-colors log-toggle">
+                    <i class="fa fa-chevron-down transform transition-transform duration-300"></i>
+                  </button>
+                </div>
+                <div class="log-content px-4 py-3 bg-white text-sm text-dark-2 hidden">
+                  WARN: 内存使用率过高 - 当前使用率85%，超过阈值80%
+                </div>
+              </div>
+              
+              <!-- 日志条目3 -->
+              <div class="log-item border border-light-2 rounded-lg overflow-hidden transform transition-all duration-300 hover:border-primary/50 hover:shadow-sm">
+                <div class="log-header bg-light-1 px-4 py-2 flex justify-between items-center cursor-pointer">
+                  <div class="flex items-center">
+                    <span class="inline-block w-2 h-2 rounded-full bg-danger mr-2"></span>
+                    <span class="text-sm font-medium">2024-10-20 08:45:22</span>
+                  </div>
+                  <button class="text-light-3 hover:text-primary transition-colors log-toggle">
+                    <i class="fa fa-chevron-down transform transition-transform duration-300"></i>
+                  </button>
+                </div>
+                <div class="log-content px-4 py-3 bg-white text-sm text-dark-2 hidden">
+                  ERROR: 数据库连接失败 - 无法连接到主数据库服务器db-master-01
+                </div>
+              </div>
+              
+              <!-- 日志条目4 -->
+              <div class="log-item border border-light-2 rounded-lg overflow-hidden transform transition-all duration-300 hover:border-primary/50 hover:shadow-sm">
+                <div class="log-header bg-light-1 px-4 py-2 flex justify-between items-center cursor-pointer">
+                  <div class="flex items-center">
+                    <span class="inline-block w-2 h-2 rounded-full bg-warning mr-2"></span>
+                    <span class="text-sm font-medium">2024-10-20 09:10:33</span>
+                  </div>
+                  <button class="text-light-3 hover:text-primary transition-colors log-toggle">
+                    <i class="fa fa-chevron-down transform transition-transform duration-300"></i>
+                  </button>
+                </div>
+                <div class="log-content px-4 py-3 bg-white text-sm text-dark-2 hidden">
+                  WARN: 磁盘空间不足 - /data分区剩余空间不足20%
+                </div>
+              </div>
+              
+              <!-- 日志条目5 -->
+              <div class="log-item border border-light-2 rounded-lg overflow-hidden transform transition-all duration-300 hover:border-primary/50 hover:shadow-sm">
+                <div class="log-header bg-light-1 px-4 py-2 flex justify-between items-center cursor-pointer">
+                  <div class="flex items-center">
+                    <span class="inline-block w-2 h-2 rounded-full bg-danger mr-2"></span>
+                    <span class="text-sm font-medium">2024-10-20 09:25:17</span>
+                  </div>
+                  <button class="text-light-3 hover:text-primary transition-colors log-toggle">
+                    <i class="fa fa-chevron-down transform transition-transform duration-300"></i>
+                  </button>
+                </div>
+                <div class="log-content px-4 py-3 bg-white text-sm text-dark-2 hidden">
+                  ERROR: 缓存服务异常 - Redis连接超时，无法获取缓存数据
+                </div>
+              </div>
+            </div>
+            
+            <!-- 查看更多按钮 -->
+            <div class="mt-4 text-center">
+              <button class="text-primary hover:text-primary/80 text-sm font-medium flex items-center mx-auto transition-colors group">
+                <span>查看更多日志</span>
+                <i class="fa fa-angle-down ml-1 group-hover:translate-y-1 transition-transform"></i>
+              </button>
+            </div>
+            
+            <!-- 数据库日志预览切换 -->
+            <div class="mt-6">
+              <div class="flex justify-between items-center mb-3">
+                <h3 class="font-medium text-dark">数据库日志预览 (前10条)</h3>
+                <span class="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">已过滤</span>
+              </div>
+              
+              <div class="space-y-3 max-h-96 overflow-y-auto scrollbar-hide pr-2">
+                <!-- 数据库日志条目1 -->
+                <div class="log-item border border-light-2 rounded-lg overflow-hidden transform transition-all duration-300 hover:border-primary/50 hover:shadow-sm">
+                  <div class="log-header bg-light-1 px-4 py-2 flex justify-between items-center cursor-pointer">
+                    <div class="flex items-center">
+                      <span class="inline-block w-2 h-2 rounded-full bg-danger mr-2 animate-pulse"></span>
+                      <span class="text-sm font-medium">2024-10-20 08:45:21</span>
+                    </div>
+                    <button class="text-light-3 hover:text-primary transition-colors log-toggle">
+                      <i class="fa fa-chevron-down transform transition-transform duration-300"></i>
+                    </button>
+                  </div>
+                  <div class="log-content px-4 py-3 bg-white text-sm text-dark-2">
+                    Connection: 连接断开 - 与应用服务器app-03的连接意外中断
+                  </div>
+                </div>
+                
+                <!-- 数据库日志条目2 -->
+                <div class="log-item border border-light-2 rounded-lg overflow-hidden transform transition-all duration-300 hover:border-primary/50 hover:shadow-sm">
+                  <div class="log-header bg-light-1 px-4 py-2 flex justify-between items-center cursor-pointer">
+                    <div class="flex items-center">
+                      <span class="inline-block w-2 h-2 rounded-full bg-warning mr-2"></span>
+                      <span class="text-sm font-medium">2024-10-20 09:05:47</span>
+                    </div>
+                    <button class="text-light-3 hover:text-primary transition-colors log-toggle">
+                      <i class="fa fa-chevron-down transform transition-transform duration-300"></i>
+                    </button>
+                  </div>
+                  <div class="log-content px-4 py-3 bg-white text-sm text-dark-2 hidden">
+                    WARN: 查询执行缓慢 - SQL语句执行时间超过5秒，影响性能
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 关联日志对结果 -->
+        <div class="result-content hidden" id="related-logs-content">
+          <div class="bg-light-1 rounded-lg p-4 mb-6 transform transition-all duration-300 hover:shadow-md">
+            <h3 class="font-medium mb-3 text-dark flex items-center">
+              <i class="fa fa-link text-primary mr-2"></i>关联日志统计
+            </h3>
+            <div class="flex justify-between items-center">
+              <span class="text-dark-2">符合条件的关联对数:</span>
+              <span class="font-medium text-primary text-xl">12 对</span>
+            </div>
+            <div class="mt-4">
+              <canvas id="relationChart" height="100"></canvas>
+            </div>
+            <div class="mt-3 text-xs text-dark-2">
+              <i class="fa fa-info-circle text-primary mr-1"></i>
+              图表展示了不同类型关联日志对的数量分布（基于笛卡尔积筛选）
+            </div>
+          </div>
+          
+          <!-- 关联筛选说明 -->
+          <div class="bg-primary/5 rounded-lg p-3 text-sm mb-6">
+            <div class="flex items-start">
+              <i class="fa fa-info-circle text-primary mt-0.5 mr-2"></i>
+              <div>
+                <p class="text-dark-2 font-medium">关联筛选说明：</p>
+                <p class="text-dark-2 mt-1">系统计算了应用日志集L₁和数据库日志集L₂的笛卡尔积L₁×L₂，然后筛选出满足以下条件的日志对：</p>
+                <p class="text-dark-2 mt-1">• 应用日志包含"ERROR"关键词</p>
+                <p class="text-dark-2">• 数据库日志包含"Connection"关键词</p>
+              </div>
+            </div>
+          </div>
+          
+          <h3 class="font-medium text-dark mb-3">关联日志对预览</h3>
+          
+          <div class="space-y-4 max-h-[600px] overflow-y-auto scrollbar-hide pr-2">
+            <!-- 关联日志对1 -->
+            <div class="border border-light-2 rounded-lg overflow-hidden transform transition-all duration-300 hover:border-primary/50 hover:shadow-md">
+              <div class="bg-light-1 px-4 py-2 flex justify-between items-center">
+                <span class="text-sm font-medium">关联对 #1</span>
+                <span class="text-xs bg-success/10 text-success px-2 py-0.5 rounded-full">匹配</span>
+              </div>
+              <div class="p-4 space-y-4">
+                <div class="bg-white p-3 rounded border border-light-2 transform transition-all duration-300 hover:border-primary/30">
+                  <div class="flex items-center mb-2">
+                    <i class="fa fa-file-text-o text-primary mr-2"></i>
+                    <span class="text-sm font-medium">应用日志</span>
+                  </div>
+                  <p class="text-sm text-dark-2">2024-10-20 08:30:15 ERROR: 接口超时 - 用户[10086]访问/api/payment超时，响应时间超过3000ms</p>
+                </div>
+                
+                <div class="flex justify-center">
+                  <i class="fa fa-long-arrow-down text-light-3 animate-bounce-slow" style="animation-duration: 3s"></i>
+                </div>
+                
+                <div class="bg-white p-3 rounded border border-light-2 transform transition-all duration-300 hover:border-primary/30">
+                  <div class="flex items-center mb-2">
+                    <i class="fa fa-database text-primary mr-2"></i>
+                    <span class="text-sm font-medium">数据库日志</span>
+                  </div>
+                  <p class="text-sm text-dark-2">2024-10-20 08:30:14 Connection: 连接缓慢 - 与主数据库的连接响应延迟超过2秒</p>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 关联日志对2 -->
+            <div class="border border-light-2 rounded-lg overflow-hidden transform transition-all duration-300 hover:border-primary/50 hover:shadow-md">
+              <div class="bg-light-1 px-4 py-2 flex justify-between items-center">
+                <span class="text-sm font-medium">关联对 #2</span>
+                <span class="text-xs bg-success/10 text-success px-2 py-0.5 rounded-full">匹配</span>
+              </div>
+              <div class="p-4 space-y-4">
+                <div class="bg-white p-3 rounded border border-light-2 transform transition-all duration-300 hover:border-primary/30">
+                  <div class="flex items-center mb-2">
+                    <i class="fa fa-file-text-o text-primary mr-2"></i>
+                    <span class="text-sm font-medium">应用日志</span>
+                  </div>
+                  <p class="text-sm text-dark-2">2024-10-20 08:45:22 ERROR: 数据库连接失败 - 无法连接到主数据库服务器db-master-01</p>
+                </div>
+                
+                <div class="flex justify-center">
+                  <i class="fa fa-long-arrow-down text-light-3 animate-bounce-slow" style="animation-duration: 3s; animation-delay: 0.5s"></i>
+                </div>
+                
+                <div class="bg-white p-3 rounded border border-light-2 transform transition-all duration-300 hover:border-primary/30">
+                  <div class="flex items-center mb-2">
+                    <i class="fa fa-database text-primary mr-2"></i>
+                    <span class="text-sm font-medium">数据库日志</span>
+                  </div>
+                  <p class="text-sm text-dark-2">2024-10-20 08:45:21 Connection: 连接断开 - 与应用服务器app-03的连接意外中断</p>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 关联日志对3 -->
+            <div class="border border-light-2 rounded-lg overflow-hidden transform transition-all duration-300 hover:border-primary/50 hover:shadow-md">
+              <div class="bg-light-1 px-4 py-2 flex justify-between items-center">
+                <span class="text-sm font-medium">关联对 #3</span>
+                <span class="text-xs bg-success/10 text-success px-2 py-0.5 rounded-full">匹配</span>
+              </div>
+              <div class="p-4 space-y-4">
+                <div class="bg-white p-3 rounded border border-light-2 transform transition-all duration-300 hover:border-primary/30">
+                  <div class="flex items-center mb-2">
+                    <i class="fa fa-file-text-o text-primary mr-2"></i>
+                    <span class="text-sm font-medium">应用日志</span>
+                  </div>
+                  <p class="text-sm text-dark-2">2024-10-20 09:25:17 ERROR: 缓存服务异常 - Redis连接超时，无法获取缓存数据</p>
+                </div>
+                
+                <div class="flex justify-center">
+                  <i class="fa fa-long-arrow-down text-light-3 animate-bounce-slow" style="animation-duration: 3s; animation-delay: 1s"></i>
+                </div>
+                
+                <div class="bg-white p-3 rounded border border-light-2 transform transition-all duration-300 hover:border-primary/30">
+                  <div class="flex items-center mb-2">
+                    <i class="fa fa-database text-primary mr-2"></i>
+                    <span class="text-sm font-medium">数据库日志</span>
+                  </div>
+                  <p class="text-sm text-dark-2">2024-10-20 09:25:16 Connection: 连接池耗尽 - 所有数据库连接均被占用，新连接请求等待超时</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 查看更多按钮 -->
+          <div class="mt-4 text-center">
+            <button class="text-primary hover:text-primary/80 text-sm font-medium flex items-center mx-auto transition-colors group">
+              <span>查看所有关联日志对</span>
+              <i class="fa fa-angle-down ml-1 group-hover:translate-y-1 transition-transform"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 页脚 -->
+  <footer class="bg-white border-t border-light-2 py-4 mt-6 opacity-0 transition-opacity duration-500" id="footer">
+    <div class="container mx-auto px-4 text-center text-sm text-dark-2">
+      <p class="flex items-center justify-center">
+        <i class="fa fa-calculator text-primary mr-1"></i>
+        系统日志关键词过滤系统 &copy; 2024 - 基于集合运算的日志分析工具
+      </p>
+    </div>
+  </footer>
+
+  <!-- 通知提示组件 -->
+  <div id="notification" class="fixed top-4 right-4 bg-white shadow-lg rounded-lg p-4 transform translate-x-full transition-transform duration-300 flex items-center max-w-sm z-50">
+    <div id="notification-icon" class="mr-3 text-success">
+      <i class="fa fa-check-circle text-xl"></i>
+    </div>
+    <div>
+      <h4 id="notification-title" class="font-medium text-dark">操作成功</h4>
+      <p id="notification-message" class="text-sm text-dark-2">日志过滤已完成</p>
+    </div>
+    <button class="ml-auto text-light-3 hover:text-dark-2" id="close-notification">
+      <i class="fa fa-times"></i>
+    </button>
+  </div>
+
+  <script>
+    // 页面加载完成后执行
+    document.addEventListener('DOMContentLoaded', function() {
+      // 模拟加载进度
+      setTimeout(() => {
+        document.getElementById('loading-bar').style.width = '30%';
+        setTimeout(() => {
+          document.getElementById('loading-bar').style.width = '70%';
+          setTimeout(() => {
+            document.getElementById('loading-bar').style.width = '100%';
+            
+            // 加载完成，隐藏开场动画
+            setTimeout(() => {
+              const splash = document.getElementById('splash-screen');
+              splash.classList.add('opacity-0', 'pointer-events-none');
+              splash.style.transition = 'opacity 0.5s ease';
+              
+              // 显示主内容
+              setTimeout(() => {
+                document.getElementById('main-content').classList.remove('opacity-0');
+                document.getElementById('footer').classList.remove('opacity-0');
+                
+                // 显示教程模态框
+                setTimeout(() => {
+                  showTutorial();
+                }, 500);
+              }, 300);
+            }, 500);
+          }, 500);
+        }, 500);
+      }, 500);
+      
+      // 初始化图表
+      initChart();
+      
+      // 标签页切换
+      const tabs = document.querySelectorAll('.result-tab');
+      tabs.forEach(tab => {
+        tab.addEventListener('click', function() {
+          // 移除所有标签页的激活状态
+          tabs.forEach(t => {
+            t.classList.remove('text-primary', 'border-primary', 'border-b-2');
+            t.classList.add('text-dark-2');
+          });
+          
+          // 添加当前标签页的激活状态
+          this.classList.remove('text-dark-2');
+          this.classList.add('text-primary', 'border-primary', 'border-b-2');
+          
+          // 隐藏所有内容
+          document.querySelectorAll('.result-content').forEach(content => {
+            content.classList.add('hidden');
+          });
+          
+          // 显示对应内容
+          const tabId = this.getAttribute('data-tab');
+          document.getElementById(`${tabId}-content`).classList.remove('hidden');
+        });
+      });
+      
+      // 日志条目展开/折叠
+      document.querySelectorAll('.log-toggle').forEach(toggle => {
+        toggle.addEventListener('click', function(e) {
+          e.stopPropagation();
+          const content = this.closest('.log-item').querySelector('.log-content');
+          content.classList.toggle('hidden');
+          
+          // 切换图标
+          const icon = this.querySelector('i');
+          if (content.classList.contains('hidden')) {
+            icon.classList.remove('fa-chevron-up', 'rotate-180');
+            icon.classList.add('fa-chevron-down');
+          } else {
+            icon.classList.remove('fa-chevron-down');
+            icon.classList.add('fa-chevron-up', 'rotate-180');
+          }
+        });
+      });
+      
+      // 点击日志头部也可以展开/折叠
+      document.querySelectorAll('.log-header').forEach(header => {
+        header.addEventListener('click', function() {
+          const content = this.closest('.log-item').querySelector('.log-content');
+          content.classList.toggle('hidden');
+          
+          // 切换图标
+          const icon = this.querySelector('.log-toggle i');
+          if (content.classList.contains('hidden')) {
+            icon.classList.remove('fa-chevron-up', 'rotate-180');
+            icon.classList.add('fa-chevron-down');
+          } else {
+            icon.classList.remove('fa-chevron-down');
+            icon.classList.add('fa-chevron-up', 'rotate-180');
+          }
+        });
+      });
+      
+      // 文件上传功能
+      const appLogUpload = document.getElementById('appLogUpload');
+      const appLogFile = document.getElementById('appLogFile');
+      const appLogName = document.getElementById('appLogName');
+      
+      appLogUpload.addEventListener('click', () => appLogFile.click());
+      
+      appLogFile.addEventListener('change', function() {
+        if (this.files.length > 0) {
+          appLogName.querySelector('span').textContent = this.files[0].name;
+          appLogName.classList.remove('hidden');
+          appLogName.classList.add('animate-fade-in');
+          showNotification('success', '文件上传成功', `已上传应用日志: ${this.files[0].name}`);
+        }
+      });
+      
+      // 数据库日志上传
+      const dbLogUpload = document.getElementById('dbLogUpload');
+      const dbLogFile = document.getElementById('dbLogFile');
+      const dbLogName = document.getElementById('dbLogName');
+      
+      dbLogUpload.addEventListener('click', () => dbLogFile.click());
+      
+      dbLogFile.addEventListener('change', function() {
+        if (this.files.length > 0) {
+          dbLogName.querySelector('span').textContent = this.files[0].name;
+          dbLogName.classList.remove('hidden');
+          dbLogName.classList.add('animate-fade-in');
+          showNotification('success', '文件上传成功', `已上传数据库日志: ${this.files[0].name}`);
+        }
+      });
+      
+      // 拖放功能
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        appLogUpload.addEventListener(eventName, preventDefaults, false);
+        dbLogUpload.addEventListener(eventName, preventDefaults, false);
+      });
+      
+      function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      
+      ['dragenter', 'dragover'].forEach(eventName => {
+        appLogUpload.addEventListener(eventName, highlight, false);
+        dbLogUpload.addEventListener(eventName, highlight, false);
+      });
+      
+      ['dragleave', 'drop'].forEach(eventName => {
+        appLogUpload.addEventListener(eventName, unhighlight, false);
+        dbLogUpload.addEventListener(eventName, unhighlight, false);
+      });
+      
+      function highlight() {
+        this.classList.add('border-primary', 'bg-primary/5');
+      }
+      
+      function unhighlight() {
+        this.classList.remove('border-primary', 'bg-primary/5');
+      }
+      
+      appLogUpload.addEventListener('drop', handleDropApp, false);
+      dbLogUpload.addEventListener('drop', handleDropDb, false);
+      
+      function handleDropApp(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        
+        if (files.length > 0) {
+          appLogName.querySelector('span').textContent = files[0].name;
+          appLogName.classList.remove('hidden');
+          showNotification('success', '文件上传成功', `已上传应用日志: ${files[0].name}`);
+        }
+      }
+      
+      function handleDropDb(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        
+        if (files.length > 0) {
+          dbLogName.querySelector('span').textContent = files[0].name;
+          dbLogName.classList.remove('hidden');
+          showNotification('success', '文件上传成功', `已上传数据库日志: ${files[0].name}`);
+        }
+      }
+      
+      // 过滤按钮点击事件
+      document.getElementById('filterButton').addEventListener('click', function() {
+        // 检查是否上传了文件
+        const appLogSelected = !appLogName.classList.contains('hidden');
+        const dbLogSelected = !dbLogName.classList.contains('hidden');
+        
+        if (!appLogSelected && !dbLogSelected) {
+          showNotification('error', '操作失败', '请至少上传一个日志文件');
+          return;
+        }
+        
+        // 添加加载状态
+        this.disabled = true;
+        this.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i>处理中...';
+        
+        // 隐藏初始状态，显示结果
+        document.getElementById('initial-state').classList.add('hidden');
+        
+        // 模拟处理延迟
+        setTimeout(() => {
+          // 显示进度条动画
+          const appProgress = document.getElementById('appLogProgress');
+          const dbProgress = document.getElementById('dbLogProgress');
+          
+          let progress = 0;
+          const interval = setInterval(() => {
+            progress += 5;
+            if (appLogSelected) appProgress.style.width = `${Math.min(progress, 8)}%`;
+            if (dbLogSelected) dbProgress.style.width = `${Math.min(progress, 7.6)}%`;
+            
+            if (progress >= 100) {
+              clearInterval(interval);
+              
+              // 恢复按钮状态
+              document.getElementById('filterButton').disabled = false;
+              document.getElementById('filterButton').innerHTML = '<i class="fa fa-play mr-2"></i>执行过滤<span class="ml-2 text-xs bg-white/20 px-2 py-0.5 rounded-full">步骤4</span>';
+              
+              // 显示成功通知
+              showNotification('success', '过滤完成', '日志过滤已成功执行，结果已更新');
+              
+              // 显示单日志结果
+              document.getElementById('single-log-content').classList.remove('hidden');
+              
+              // 滚动到结果区域
+              document.querySelector('.result-tab[data-tab="single-log"]').scrollIntoView({
+                behavior: 'smooth'
+              });
+            }
+          }, 50);
+        }, 1000);
+      });
+      
+      // 关联筛选复选框
+      const relationCheckbox = document.getElementById('关联筛选');
+      const relationOptions = document.getElementById('关联筛选选项');
+      
+      relationCheckbox.addEventListener('change', function() {
+        if (this.checked) {
+          relationOptions.classList.remove('opacity-50', 'pointer-events-none');
+          relationOptions.classList.add('opacity-100');
+        } else {
+          relationOptions.classList.add('opacity-50', 'pointer-events-none');
+          relationOptions.classList.remove('opacity-100');
+        }
+      });
+      
+      // 关闭通知
+      document.getElementById('close-notification').addEventListener('click', function() {
+        hideNotification();
+      });
+      
+      // 导航栏滚动效果
+      window.addEventListener('scroll', function() {
+        const navbar = document.getElementById('navbar');
+        if (window.scrollY > 10) {
+          navbar.classList.add('py-2', 'shadow-lg');
+          navbar.classList.remove('py-3', 'shadow-md');
+        } else {
+          navbar.classList.add('py-3', 'shadow-md');
+          navbar.classList.remove('py-2', 'shadow-lg');
+        }
+      });
+      
+      // 教程模态框控制
+      document.getElementById('helpButton').addEventListener('click', showTutorial);
+      document.getElementById('closeTutorial').addEventListener('click', hideTutorial);
+      document.getElementById('finishTutorial').addEventListener('click', hideTutorial);
+      
+      // 小机器人助手
+      let assistantVisible = false;
+      document.getElementById('robotAssistant').addEventListener('click', function() {
+        const dialog = document.getElementById('assistantDialog');
+        if (assistantVisible) {
+          dialog.classList.add('translate-y-full', 'opacity-0');
+        } else {
+          dialog.classList.remove('translate-y-full', 'opacity-0');
+        }
+        assistantVisible = !assistantVisible;
+      });
+      
+      document.getElementById('closeAssistant').addEventListener('click', function() {
+        document.getElementById('assistantDialog').classList.add('translate-y-full', 'opacity-0');
+        assistantVisible = false;
+      });
+    });
+    
+    // 显示教程
+    function showTutorial() {
+      const modal = document.getElementById('tutorialModal');
+      modal.classList.remove('opacity-0', 'pointer-events-none');
+      modal.querySelector('div').classList.remove('scale-95');
+      modal.querySelector('div').classList.add('scale-100');
+    }
+    
+    // 隐藏教程
+    function hideTutorial() {
+      const modal = document.getElementById('tutorialModal');
+      modal.classList.add('opacity-0', 'pointer-events-none');
+      modal.querySelector('div').classList.remove('scale-100');
+      modal.querySelector('div').classList.add('scale-95');
+    }
+    
+    // 初始化关联日志图表
+    function initChart() {
+      // 等待页面加载完成再初始化图表
+      setTimeout(() => {
+        const ctx = document.getElementById('relationChart');
+        if (ctx) {
+          new Chart(ctx, {
+            type: 'bar',
+            data: {
+              labels: ['ERROR-Connection', 'ERROR-Query', 'WARN-Connection', 'WARN-Query'],
+              datasets: [{
+                label: '关联对数',
+                data: [12, 8, 5, 3],
+                backgroundColor: [
+                  '#7B61FF',
+                  '#36CFC9',
+                  '#FF7D00',
+                  '#722ED1'
+                ],
+                borderRadius: 4,
+                barThickness: 25,
+              }]
+            },
+            options: {
+              responsive: true,
+              animation: {
+                duration: 2000,
+                easing: 'easeOutQuart'
+              },
+              plugins: {
+                legend: {
+                  display: false
+                },
+                tooltip: {
+                  backgroundColor: 'white',
+                  titleColor: '#1D2129',
+                  bodyColor: '#4E5969',
+                  borderColor: '#E5E6EB',
+                  borderWidth: 1,
+                  padding: 12,
+                  displayColors: false,
+                  callbacks: {
+                    label: function(context) {
+                      return `关联对数: ${context.raw}`;
+                    }
+                  }
+                }
+              },
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  ticks: {
+                    precision: 0,
+                    stepSize: 5
+                  },
+                  grid: {
+                    color: '#F2F3F5'
+                  }
+                },
+                x: {
+                  grid: {
+                    display: false
+                  }
+                }
+              }
+            }
+          });
+        }
+      }, 2000);
+    }
+    
+    // 显示通知
+    function showNotification(type, title, message) {
+      const notification = document.getElementById('notification');
+      const icon = document.getElementById('notification-icon');
+      const titleEl = document.getElementById('notification-title');
+      const messageEl = document.getElementById('notification-message');
+      
+      // 设置通知类型
+      icon.className = '';
+      if (type === 'success') {
+        icon.className = 'mr-3 text-success';
+        icon.innerHTML = '<i class="fa fa-check-circle text-xl"></i>';
+      } else if (type === 'error') {
+        icon.className = 'mr-3 text-danger';
+        icon.innerHTML = '<i class="fa fa-exclamation-circle text-xl"></i>';
+      } else if (type === 'warning') {
+        icon.className = 'mr-3 text-warning';
+        icon.innerHTML = '<i class="fa fa-warning text-xl"></i>';
+      }
+      
+      // 设置内容
+      titleEl.textContent = title;
+      messageEl.textContent = message;
+      
+      // 显示通知
+      notification.classList.remove('translate-x-full');
+      notification.classList.add('translate-x-0');
+      
+      // 3秒后自动隐藏
+      setTimeout(hideNotification, 3000);
+    }
+    
+    // 隐藏通知
+    function hideNotification() {
+      const notification = document.getElementById('notification');
+      notification.classList.remove('translate-x-0');
+      notification.classList.add('translate-x-full');
+    }
+  </script>
+</body>
+</html>
